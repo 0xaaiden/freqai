@@ -109,23 +109,27 @@ def backtest(backtest_conf, processed, mocker):
     labels = ['currency', 'profit', 'duration']
     return DataFrame.from_records(trades, columns=labels)
 
+def get_ticker_interval():
+    """ Parse ticker interval """
+    return int(os.environ.get('BACKTEST_TICKER_INTERVAL') or 5)
+
+
+def get_backtest_config(backtest_conf):
+    """ Load configuration file based on env variable """
+    conf_path = os.environ.get('BACKTEST_CONFIG')
+    if conf_path:
+        print('Using config: {} ...'.format(conf_path))
+        return load_config(conf_path)
+    return backtest_conf
+
 
 @pytest.mark.skipif(not os.environ.get('BACKTEST'), reason="BACKTEST not set")
 def test_backtest(backtest_conf, mocker):
     print('')
     exchange._API = Bittrex({'key': '', 'secret': ''})
-
-    # Load configuration file based on env variable
-    conf_path = os.environ.get('BACKTEST_CONFIG')
-    if conf_path:
-        print('Using config: {} ...'.format(conf_path))
-        config = load_config(conf_path)
-    else:
-        config = backtest_conf
-
-    # Parse ticker interval
-    ticker_interval = int(os.environ.get('BACKTEST_TICKER_INTERVAL') or 5)
+    ticker_interval = get_ticker_interval()
     print('Using ticker_interval: {} ...'.format(ticker_interval))
+    config = get_backtest_config(backtest_conf)
 
     data = {}
     if os.environ.get('BACKTEST_LIVE'):
