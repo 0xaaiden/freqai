@@ -24,7 +24,7 @@ logging.disable(logging.DEBUG)  # disable debug logs that slow backtesting a lot
 
 # set TARGET_TRADES to suit your number concurrent trades so its realistic to 20days of data
 TARGET_TRADES = 1100
-TOTAL_TRIES = 4
+TOTAL_TRIES = 1000
 # pylint: disable=C0103
 TRIALS_FILE='freqtrade/tests/hyperopt_trials.pickle'
 current_tries = 0
@@ -42,6 +42,9 @@ def save_trials(location=TRIALS_FILE):
 def read_trials(location=TRIALS_FILE):
     print('Reading Trials from \'{}\''.format(locals))
     trials = pickle.load(open(location, 'rb'))
+    # after un-pickling, delete the file
+    os.remove(location)
+    
 
 def signal_handler(signal, frame):
     print("Hyperopt received SIGINT")
@@ -181,6 +184,12 @@ def test_hyperopt(backtest_conf, mocker):
     print('Best parameters {}'.format(best))
     newlist = sorted(trials.results, key=itemgetter('loss'))
     print('Result: {}'.format(newlist[0]['result']))
+
+
+@pytest.mark.skipif(not os.environ.get('BACKTEST', False), reason="BACKTEST not set")
+def test_hyperopt_new(backtest_conf, mocker):
+    if os.path.exists(TRIALS_FILE):
+        read_trials()
 
 if __name__ == '__main__':
     # for profiling with cProfile and line_profiler
