@@ -1,6 +1,9 @@
 # pragma pylint: disable=missing-docstring,W0212
 import logging
 import os
+import pickle
+import signal
+import sys
 from functools import reduce
 from math import exp
 from operator import itemgetter
@@ -8,6 +11,7 @@ from operator import itemgetter
 import pytest
 from hyperopt import fmin, tpe, hp, Trials, STATUS_OK
 from pandas import DataFrame
+import numpy as np
 
 from freqtrade import exchange
 from freqtrade.exchange import Bittrex
@@ -22,9 +26,30 @@ logging.disable(logging.DEBUG)  # disable debug logs that slow backtesting a lot
 TARGET_TRADES = 1100
 TOTAL_TRIES = 4
 # pylint: disable=C0103
+TRIALS_FILE='freqtrade/tests/hyperopt_trials.pickle'
 current_tries = 0
 
+trials = Trials()
 
+def summarize():
+    summary = np.sort(np.array([x for x in trials.losses() if x is not None]))
+    print("Trials summary:\n{}".format(summary))
+
+def save_trials(location=TRIALS_FILE):
+    print('Saving Trials to \'{}\''.format(location))
+    pickle.dump(trials, open(location, 'wb'))
+
+def read_trials(location=TRIALS_FILE):
+    print('Reading Trials from \'{}\''.format(locals))
+    trials = pickle.load(open(location, 'rb'))
+
+def signal_handler(signal, frame):
+    print("Hyperopt received SIGINT")
+    save_trials()
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+    
 def buy_strategy_generator(params):
     def populate_buy_trend(dataframe: DataFrame) -> DataFrame:
         conditions = []
@@ -150,13 +175,12 @@ def test_hyperopt(backtest_conf, mocker):
             {'type': 'ht_sine'},
         ]),
     }
-    trials = Trials()
+
     best = fmin(fn=optimizer, space=space, algo=tpe.suggest, max_evals=TOTAL_TRIES, trials=trials)
     print('\n\n\n\n==================== HYPEROPT BACKTESTING REPORT ==============================')
     print('Best parameters {}'.format(best))
     newlist = sorted(trials.results, key=itemgetter('loss'))
     print('Result: {}'.format(newlist[0]['result']))
-
 
 if __name__ == '__main__':
     # for profiling with cProfile and line_profiler
