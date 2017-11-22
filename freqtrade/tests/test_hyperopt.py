@@ -24,7 +24,7 @@ logging.disable(logging.DEBUG)  # disable debug logs that slow backtesting a lot
 
 # set TARGET_TRADES to suit your number concurrent trades so its realistic to 20days of data
 TARGET_TRADES = 1100
-TOTAL_TRIES = 1000
+TOTAL_TRIES = 4 #1000
 # pylint: disable=C0103
 TRIALS_FILE='freqtrade/tests/hyperopt_trials.pickle'
 current_tries = 0
@@ -35,15 +35,15 @@ def summarize():
     summary = np.sort(np.array([x for x in trials.losses() if x is not None]))
     print("Trials summary:\n{}".format(summary))
 
-def save_trials(location=TRIALS_FILE):
-    print('Saving Trials to \'{}\''.format(location))
-    pickle.dump(trials, open(location, 'wb'))
+def save_trials(trials_path=TRIALS_FILE):
+    print('Saving Trials to \'{}\''.format(trials_path))
+    pickle.dump(trials, open(trials_path, 'wb'))
 
-def read_trials(location=TRIALS_FILE):
-    print('Reading Trials from \'{}\''.format(locals))
-    trials = pickle.load(open(location, 'rb'))
+def read_trials(trials_path=TRIALS_FILE):
+    print('Reading Trials from \'{}\''.format(trials_path))
+    trials = pickle.load(open(trials_path, 'rb'))
     # after un-pickling, delete the file
-    os.remove(location)
+    os.remove(trials_path)
     
 
 def signal_handler(signal, frame):
