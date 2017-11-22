@@ -24,7 +24,12 @@ logging.disable(logging.DEBUG)  # disable debug logs that slow backtesting a lot
 
 # set TARGET_TRADES to suit your number concurrent trades so its realistic to 20days of data
 TARGET_TRADES = 1100
-TOTAL_TRIES = 4 #1000
+TOTAL_TRIES = 4
+
+TOTAL_PROFIT_TARGET = 3
+AVG_PROFIT_TARGET = 0.2
+AVG_DURATION_TARGET = 70
+
 # pylint: disable=C0103
 TRIALS_FILE='freqtrade/tests/hyperopt_trials.pickle'
 current_tries = 0
@@ -44,7 +49,6 @@ def read_trials(trials_path=TRIALS_FILE):
     trials = pickle.load(open(trials_path, 'rb'))
     # after un-pickling, delete the file
     os.remove(trials_path)
-    
 
 def signal_handler(signal, frame):
     print("Hyperopt received SIGINT")
@@ -52,7 +56,22 @@ def signal_handler(signal, frame):
     sys.exit(0)
 
 signal.signal(signal.SIGINT, signal_handler)
-    
+
+
+def format_result_outcome(data):
+    current_try = data['current_tries']
+    total_tries = data['total_tries']
+    result = data['result']
+    profit = data['total_profit'] / 1000
+
+    # print('*** profit {}'.format(profit))
+
+    if profit >= TOTAL_PROFIT_TARGET:
+        print('{:5d}/{}: {}'.format(current_try, total_tries, result))
+    else:
+        print('.', end='')
+        sys.stdout.flush()
+
 def buy_strategy_generator(params):
     def populate_buy_trend(dataframe: DataFrame) -> DataFrame:
         conditions = []
@@ -122,12 +141,27 @@ def test_hyperopt(backtest_conf, mocker):
         # pylint: disable=W0603
         global current_tries
         current_tries += 1
-        print('{:5d}/{}: {}'.format(current_tries, TOTAL_TRIES, result))
+
+        # TODO refactor to backtesting as a generic func
+        result_data = {
+            'trade_count': trade_count,
+            'total_profit': total_profit,
+            'trade_loss': trade_loss,
+            'profit_loss': profit_loss,
+            'avg_profit': results.profit.mean() * 100.0,
+            'avg_duration': results.duration.mean() * 5,
+            'current_tries': current_tries,
+            'total_tries': TOTAL_TRIES,
+            'result': result
+        }
+
+        format_result_outcome(result_data)
 
         return {
             'loss': trade_loss + profit_loss,
             'status': STATUS_OK,
-            'result': result
+            'result': result,
+            'result_data': result_data
         }
 
     space = {
@@ -178,16 +212,16 @@ def test_hyperopt(backtest_conf, mocker):
             {'type': 'ht_sine'},
         ]),
     }
-
+    print('Running Hyperopt. Will take time..')
     best = fmin(fn=optimizer, space=space, algo=tpe.suggest, max_evals=TOTAL_TRIES, trials=trials)
     print('\n\n\n\n==================== HYPEROPT BACKTESTING REPORT ==============================')
     print('Best parameters {}'.format(best))
     newlist = sorted(trials.results, key=itemgetter('loss'))
     print('Result: {}'.format(newlist[0]['result']))
 
-
 @pytest.mark.skipif(not os.environ.get('BACKTEST', False), reason="BACKTEST not set")
 def test_hyperopt_new(backtest_conf, mocker):
+    print('new hyperopt...')
     if os.path.exists(TRIALS_FILE):
         read_trials()
 

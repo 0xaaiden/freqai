@@ -22,13 +22,22 @@ from freqtrade.tests import load_backtesting_data
 logger = logging.getLogger(__name__)
 
 
+def get_results_outcome(results: DataFrame):
+    return {
+        'buys': len(results.index),
+        'avg_profit': results.profit.mean() * 100.0,
+        'total_profit': results.profit.sum(),
+        'avg_duration': results.duration.mean() * 5,
+    }
+
 def format_results(results: DataFrame):
+    res = get_results_outcome(results)
     return ('Made {:6d} buys. Average profit {: 5.2f}%. '
             'Total profit was {: 7.3f}. Average duration {:5.1f} mins.').format(
-                len(results.index),
-                results.profit.mean() * 100.0,
-                results.profit.sum(),
-                results.duration.mean() * 5,
+                res['buys'],
+                res['avg_profit'],
+                res['total_profit'],
+                res['avg_duration'],
             )
 
 
