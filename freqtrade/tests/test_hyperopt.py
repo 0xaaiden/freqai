@@ -26,9 +26,11 @@ logging.disable(logging.DEBUG)  # disable debug logs that slow backtesting a lot
 TARGET_TRADES = 1100
 TOTAL_TRIES = 4
 
-TOTAL_PROFIT_TARGET = 3
+TOTAL_PROFIT_TARGET = 4
 AVG_PROFIT_TARGET = 0.2
 AVG_DURATION_TARGET = 70
+
+EMIT_OUTCOME = True # Disable if you want to omit hyperopt outcome
 
 # pylint: disable=C0103
 TRIALS_FILE='freqtrade/tests/hyperopt_trials.pickle'
@@ -50,6 +52,8 @@ def read_trials(trials_path=TRIALS_FILE):
     # after un-pickling, delete the file
     os.remove(trials_path)
 
+    return trials
+
 def signal_handler(signal, frame):
     print("Hyperopt received SIGINT")
     save_trials()
@@ -57,17 +61,18 @@ def signal_handler(signal, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
-
 def format_result_outcome(data):
     current_try = data['current_tries']
     total_tries = data['total_tries']
     result = data['result']
     profit = data['total_profit'] / 1000
 
-    # print('*** profit {}'.format(profit))
+    outcome = '{:5d}/{}: {}'.format(current_try, total_tries, result)
 
     if profit >= TOTAL_PROFIT_TARGET:
-        print('{:5d}/{}: {}'.format(current_try, total_tries, result))
+        print(outcome)
+    elif EMIT_OUTCOME:
+        print(outcome)
     else:
         print('.', end='')
         sys.stdout.flush()
@@ -119,6 +124,13 @@ def buy_strategy_generator(params):
 
 @pytest.mark.skipif(not os.environ.get('BACKTEST', False), reason="BACKTEST not set")
 def test_hyperopt(backtest_conf, mocker):
+    if os.path.exists(TRIALS_FILE):
+        trials = read_trials()
+        # pylint: disable=W0603
+        global current_tries
+        current_tries = len([result for result in trials.results if result['status'] == 'ok'])
+        print('current_tries {}'.format(current_tries))
+
     mocked_buy_trend = mocker.patch('freqtrade.tests.test_backtesting.populate_buy_trend')
 
     backdata = load_backtesting_data()
@@ -218,12 +230,6 @@ def test_hyperopt(backtest_conf, mocker):
     print('Best parameters {}'.format(best))
     newlist = sorted(trials.results, key=itemgetter('loss'))
     print('Result: {}'.format(newlist[0]['result']))
-
-@pytest.mark.skipif(not os.environ.get('BACKTEST', False), reason="BACKTEST not set")
-def test_hyperopt_new(backtest_conf, mocker):
-    print('new hyperopt...')
-    if os.path.exists(TRIALS_FILE):
-        read_trials()
 
 if __name__ == '__main__':
     # for profiling with cProfile and line_profiler
