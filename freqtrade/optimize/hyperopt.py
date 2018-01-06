@@ -114,6 +114,7 @@ def read_trials(trials_path=TRIALS_FILE):
     # os.remove(trials_path)
     return trials
 
+
 def log_results(results):
     """ log results if it is better than any previous evaluation """
     global CURRENT_BEST_LOSS
@@ -259,7 +260,11 @@ def start(args):
         # read trials file if we have one
         if os.path.exists(TRIALS_FILE):
             TRIALS = read_trials()
-            _CURRENT_TRIES = len([result for result in TRIALS.results if result['status'] == 'ok'])
+            _CURRENT_TRIES = len(TRIALS.results)
+            TOTAL_TRIES = TOTAL_TRIES + _CURRENT_TRIES
+            logger.info(
+                'Continuing with trials. Current: {}, Total: {}'
+                .format(_CURRENT_TRIES, TOTAL_TRIES))
 
     best = fmin(fn=optimizer, space=SPACE, algo=tpe.suggest, max_evals=TOTAL_TRIES, trials=TRIALS)
     logger.info('Best parameters:\n%s', json.dumps(best, indent=4))
@@ -268,7 +273,7 @@ def start(args):
     logger.info('Best Result:\n%s', results[0]['result'])
 
     # Store trials result to file to resume next time
-    # save_trials(TRIALS)
+    save_trials(TRIALS)
 
 
 def signal_handler(sig, frame):
