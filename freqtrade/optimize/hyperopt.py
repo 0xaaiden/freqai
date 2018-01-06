@@ -4,6 +4,9 @@
 import json
 import logging
 import sys
+import pickle
+import signal
+import os
 from functools import reduce
 from math import exp
 from operator import itemgetter
@@ -38,6 +41,10 @@ EXPECTED_MAX_PROFIT = 3.85
 # Configuration and data used by hyperopt
 PROCESSED = optimize.preprocess(optimize.load_data())
 OPTIMIZE_CONFIG = hyperopt_optimize_conf()
+
+# Hyperopt Trials
+TRIALS_FILE = 'freqtrade/optimize/hyperopt_trials.pickle'
+TRIALS = Trials()
 
 # Monkey patch config
 from freqtrade import main  # noqa
@@ -93,6 +100,19 @@ SPACE = {
     ]),
 }
 
+
+def save_trials(trials, trials_path=TRIALS_FILE):
+    "Save hyperopt trials to file"
+    logger.info('Saving Trials to \'{}\''.format(trials_path))
+    pickle.dump(trials, open(trials_path, 'wb'))
+
+
+def read_trials(trials_path=TRIALS_FILE):
+    "Read hyperopt trials file"
+    logger.info('Reading Trials from \'{}\''.format(trials_path))
+    trials = pickle.load(open(trials_path, 'rb'))
+    # os.remove(trials_path)
+    return trials
 
 def log_results(results):
     """ log results if it is better than any previous evaluation """
@@ -209,7 +229,8 @@ def buy_strategy_generator(params):
 
 
 def start(args):
-    global TOTAL_TRIES, PROCESSED
+    global TOTAL_TRIES, PROCESSED, TRIALS, _CURRENT_TRIES
+
     TOTAL_TRIES = args.epochs
 
     exchange._API = Bittrex({'key': '', 'secret': ''})
@@ -231,12 +252,28 @@ def start(args):
         logger.info('Start scripts/start-mongodb.sh and start-hyperopt-worker.sh manually!')
 
         db_name = 'freqtrade_hyperopt'
-        trials = MongoTrials('mongo://127.0.0.1:1234/{}/jobs'.format(db_name), exp_key='exp1')
+        TRIALS = MongoTrials('mongo://127.0.0.1:1234/{}/jobs'.format(db_name), exp_key='exp1')
     else:
-        trials = Trials()
+        logger.info('Preparing Trials..')
+        signal.signal(signal.SIGINT, signal_handler)
+        # read trials file if we have one
+        if os.path.exists(TRIALS_FILE):
+            TRIALS = read_trials()
+            _CURRENT_TRIES = len([result for result in TRIALS.results if result['status'] == 'ok'])
 
-    best = fmin(fn=optimizer, space=SPACE, algo=tpe.suggest, max_evals=TOTAL_TRIES, trials=trials)
+    best = fmin(fn=optimizer, space=SPACE, algo=tpe.suggest, max_evals=TOTAL_TRIES, trials=TRIALS)
     logger.info('Best parameters:\n%s', json.dumps(best, indent=4))
 
-    results = sorted(trials.results, key=itemgetter('loss'))
+    results = sorted(TRIALS.results, key=itemgetter('loss'))
     logger.info('Best Result:\n%s', results[0]['result'])
+
+    # Store trials result to file to resume next time
+    # save_trials(TRIALS)
+
+
+def signal_handler(sig, frame):
+    "Hyperopt SIGINT handler"
+    logger.info('Hyperopt received {}'.format(signal.Signals(sig).name))
+
+    save_trials(TRIALS)
+    sys.exit(0)
